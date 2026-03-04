@@ -269,3 +269,4 @@ def render():
         file_name="fechamento_folha.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+   render()
