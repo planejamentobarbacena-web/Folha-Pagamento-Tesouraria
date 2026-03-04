@@ -5,6 +5,8 @@ import io
 
 def render():
 
+    st.title("Fechamento da Folha")
+
     # =============================
     # UPLOAD
     # =============================
@@ -29,9 +31,7 @@ def render():
             dtype=str
         )
     else:
-        df = pd.read_excel(
-            arquivo, dtype=str
-        )
+        df = pd.read_excel(arquivo, dtype=str)
 
     df.columns = df.columns.str.strip()
 
@@ -44,7 +44,6 @@ def render():
     # SEPARAR ESTRUTURA
     # =============================
     df["codigo_completo"] = df["Estrutura organizacional"].str.split(" - ").str[0]
-    df["Estrutura"] = df["Estrutura organizacional"].str.split(" - ").str[1]
 
     df["Código Secretaria"] = df["codigo_completo"].str[:2]
     df["Organograma"] = df["codigo_completo"].str[:8]
@@ -92,19 +91,17 @@ def render():
     descontos = df[df["Tipo Evento"] == "DESCONTO"].copy()
 
     # =============================
-    # SOMAS POR FONTE
+    # VENCIMENTOS POR FONTE
     # =============================
     total_vencimentos = (
-        vencimentos
-        .groupby("Fonte de Recurso")["Valor_num"]
+        vencimentos.groupby("Fonte de Recurso")["Valor_num"]
         .sum()
         .reset_index()
         .rename(columns={"Valor_num": "Total Vencimentos"})
     )
 
     total_descontos = (
-        descontos
-        .groupby("Fonte de Recurso")["Valor_num"]
+        descontos.groupby("Fonte de Recurso")["Valor_num"]
         .sum()
         .reset_index()
         .rename(columns={"Valor_num": "Total Descontos"})
@@ -121,9 +118,7 @@ def render():
         - totais["Total Descontos"]
     )
 
-    # =============================
     # VALE
-    # =============================
     vale = vencimentos[
         vencimentos["Evento"].isin([
             "AUXILIO ALIMENTACAO",
@@ -132,31 +127,24 @@ def render():
     ]
 
     vale_por_fonte = (
-        vale
-        .groupby("Fonte de Recurso")["Valor_num"]
+        vale.groupby("Fonte de Recurso")["Valor_num"]
         .sum()
         .reset_index()
         .rename(columns={"Valor_num": "Vale"})
     )
 
-    # =============================
     # IRRF
-    # =============================
     irrf = descontos[
         descontos["Evento"].str.contains("I.R.R.F", case=False, na=False)
     ]
 
     irrf_por_fonte = (
-        irrf
-        .groupby("Fonte de Recurso")["Valor_num"]
+        irrf.groupby("Fonte de Recurso")["Valor_num"]
         .sum()
         .reset_index()
         .rename(columns={"Valor_num": "IRRF"})
     )
 
-    # =============================
-    # MONTAR ABA VENCIMENTOS
-    # =============================
     aba_vencimentos = (
         totais
         .merge(vale_por_fonte, on="Fonte de Recurso", how="left")
@@ -174,60 +162,126 @@ def render():
     ]
 
     # =============================
+    # RETENÇÕES À CREDORES
+    # =============================
+    mapa_classificacao = {
+        "ASS.DOS S. PUB.MUNICIPAIS": "ASPM",
+        "ASPM - SEDE SOCIAL": "ASPM",
+        "TAXA MANUTENCAO UNIMED": "ASPM",
+        "UNIMED DEPENTES INDIRETOS": "ASPM",
+        "UNIMED INDIVIDUAL": "ASPM",
+        "FUNDO RESERVA UNIMED": "ASPM",
+        "ASPM - CARTÃO DE TODOS": "ASPM",
+        "UNIMED INTERNACAO II": "ASPM",
+        "ASPM UNIMED": "ASPM",
+        "UNIMED INTERNACAO I": "ASPM",
+        "CEF CONSIG.PREFEITURA": "CAIXA ECONÔMICA",
+        "CONSIGNACAO BCO ITAU": "ITAÚ",
+        "SIND. SERV.PUBL. MUNIC.": "SINDICATO DOS SERVIDORES",
+        "SICOOB CONSIGNAÇÃO": "SICOOB CONSIGNADO",
+        "PREVISUL": "PREVISUL",
+        "SIND. UTE": "SIND. UTE",
+        "BANCO BRASIL CONSIGNACAO": "BANCO DO BRASIL",
+        "CONSIGNADO SICREDI": "CONSIGNADO SICREDI",
+        "ASSOCIACAO GUARDA MUNIC.": "ASSOCIAÇÃO DOS GUARDAS",
+        "FARMACIA (ASS GUARDA MUN)": "ASSOCIAÇÃO DOS GUARDAS",
+        "VERTCON SEGUROS": "VERTCON",
+        "CONSIG BRADESCO": "BRADESCO",
+        "CAPEMISA PREV/ SEG/EMPR": "CAPEMISA"
+    }
+
+    descontos["Credor"] = descontos["Evento"].map(mapa_classificacao)
+    consignacoes = descontos[descontos["Credor"].notna()].copy()
+
+    aba_repasses = (
+        consignacoes.pivot_table(
+            index="Credor",
+            columns="Fonte de Recurso",
+            values="Valor_num",
+            aggfunc="sum",
+            fill_value=0
+        ).reset_index()
+    )
+
+    # =============================
     # DESCONTOS POR EVENTO
     # =============================
     aba_descontos = (
-        descontos
-        .pivot_table(
+        descontos.pivot_table(
             index="Evento",
             columns="Fonte de Recurso",
             values="Valor_num",
             aggfunc="sum",
             fill_value=0
-        )
-        .reset_index()
+        ).reset_index()
     )
 
     # =============================
-    # FORMATAR MOEDA
+    # FORMATAR SOMENTE PARA EXIBIÇÃO
     # =============================
     def formatar_moeda(valor):
         return f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-    aba_vencimentos_exibir = aba_vencimentos.copy()
-    for col in ["Liquido", "Vale", "Liquido + Vale", "IRRF"]:
-        aba_vencimentos_exibir[col] = aba_vencimentos_exibir[col].apply(formatar_moeda)
+    aba_vencimentos_view = aba_vencimentos.copy()
+    aba_repasses_view = aba_repasses.copy()
+    aba_descontos_view = aba_descontos.copy()
 
-    aba_descontos_exibir = aba_descontos.copy()
-    for col in aba_descontos_exibir.columns[1:]:
-        aba_descontos_exibir[col] = aba_descontos_exibir[col].apply(formatar_moeda)
+    for df_exibir in [aba_vencimentos_view, aba_repasses_view, aba_descontos_view]:
+        for col in df_exibir.columns[1:]:
+            df_exibir[col] = df_exibir[col].apply(formatar_moeda)
 
     # =============================
     # EXIBIÇÃO
     # =============================
     st.subheader("📊 Vencimentos por Fonte")
-    st.dataframe(aba_vencimentos_exibir, use_container_width=True)
+    st.dataframe(aba_vencimentos_view, use_container_width=True)
+
+    st.subheader("🏦 Retenções à Credores")
+    st.dataframe(aba_repasses_view, use_container_width=True)
 
     st.subheader("📉 Descontos por Evento")
-    st.dataframe(aba_descontos_exibir, use_container_width=True)
+    st.dataframe(aba_descontos_view, use_container_width=True)
 
     # =============================
-    # EXPORTAÇÃO EXCEL
+    # ALERTA
+    # =============================
+    nao_classificados = descontos[descontos["Credor"].isna()]["Evento"].unique()
+
+    if len(nao_classificados) > 0:
+        st.error("⚠️ EXISTEM DESCONTOS NÃO CLASSIFICADOS PARA RETENÇÃO À CREDORES")
+        st.dataframe(
+            pd.DataFrame(nao_classificados, columns=["Evento não classificado"]),
+            use_container_width=True
+        )
+
+        # =============================
+    # EXPORTAÇÃO (NUMÉRICO + FORMATO MOEDA)
     # =============================
     output = io.BytesIO()
 
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+
         aba_vencimentos.to_excel(writer, sheet_name="Vencimentos", index=False)
+        aba_repasses.to_excel(writer, sheet_name="Retencoes_Credores", index=False)
         aba_descontos.to_excel(writer, sheet_name="Descontos", index=False)
 
         workbook = writer.book
-        formato_moeda = workbook.add_format({'num_format': 'R$ #,##0.00'})
+        formato_moeda = workbook.add_format({
+            "num_format": 'R$ #,##0.00'
+        })
 
-        ws_v = writer.sheets["Vencimentos"]
-        ws_v.set_column("B:E", 18, formato_moeda)
+        # Aplicar formato nas colunas numéricas
+        for sheet_name, df_excel in {
+            "Vencimentos": aba_vencimentos,
+            "Retencoes_Credores": aba_repasses,
+            "Descontos": aba_descontos
+        }.items():
 
-        ws_d = writer.sheets["Descontos"]
-        ws_d.set_column(1, 100, 18, formato_moeda)
+            worksheet = writer.sheets[sheet_name]
+
+            # Começa da coluna 1 (coluna 0 é texto: Fonte / Credor / Evento)
+            for col_num in range(1, len(df_excel.columns)):
+                worksheet.set_column(col_num, col_num, 18, formato_moeda)
 
     st.download_button(
         label="📥 Baixar planilha de fechamento",
