@@ -91,7 +91,7 @@ def render():
     descontos = df[df["Tipo Evento"] == "DESCONTO"].copy()
 
     # =============================
-    # VENCIMENTOS POR FONTE
+    # VENCIMENTOS
     # =============================
     total_vencimentos = (
         vencimentos.groupby("Fonte de Recurso")["Valor_num"]
@@ -118,7 +118,9 @@ def render():
         - totais["Total Descontos"]
     )
 
-    # VALE
+    # =============================
+    # VALE ALIMENTAÇÃO
+    # =============================
     vale = vencimentos[
         vencimentos["Evento"].isin([
             "AUXILIO ALIMENTACAO",
@@ -133,7 +135,9 @@ def render():
         .rename(columns={"Valor_num": "Vale"})
     )
 
+    # =============================
     # IRRF
+    # =============================
     irrf = descontos[
         descontos["Evento"].str.contains("I.R.R.F", case=False, na=False)
     ]
@@ -145,10 +149,28 @@ def render():
         .rename(columns={"Valor_num": "IRRF"})
     )
 
+    # =============================
+    # PENSÃO
+    # =============================
+    pensao = descontos[
+        descontos["Evento"].str.contains(r"^pens[aã]o", case=False, na=False)
+    ]
+
+    pensao_por_fonte = (
+        pensao.groupby("Fonte de Recurso")["Valor_num"]
+        .sum()
+        .reset_index()
+        .rename(columns={"Valor_num": "Pensão"})
+    )
+
+    # =============================
+    # MONTAR TABELA
+    # =============================
     aba_vencimentos = (
         totais
         .merge(vale_por_fonte, on="Fonte de Recurso", how="left")
         .merge(irrf_por_fonte, on="Fonte de Recurso", how="left")
+        .merge(pensao_por_fonte, on="Fonte de Recurso", how="left")
         .fillna(0)
     )
 
@@ -157,9 +179,16 @@ def render():
         - aba_vencimentos["Vale"]
     )
 
+    aba_vencimentos["TOTAL FOLHA"] = (
+        aba_vencimentos["Liquido"]
+        + aba_vencimentos["Vale"]
+        + aba_vencimentos["Pensão"]
+    )
+
     aba_vencimentos = aba_vencimentos[
-        ["Fonte de Recurso", "Liquido", "Vale", "Liquido + Vale", "IRRF"]
+        ["Fonte de Recurso", "Liquido", "Vale", "Pensão", "TOTAL FOLHA", "IRRF"]
     ]
+
 
     # =============================
     # RETENÇÕES À CREDORES
@@ -217,7 +246,7 @@ def render():
     )
 
     # =============================
-    # FORMATAR SOMENTE PARA EXIBIÇÃO
+    # FORMATAR EXIBIÇÃO
     # =============================
     def formatar_moeda(valor):
         return f"R${valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -254,8 +283,8 @@ def render():
             use_container_width=True
         )
 
-        # =============================
-    # EXPORTAÇÃO (NUMÉRICO + FORMATO MOEDA)
+    # =============================
+    # EXPORTAÇÃO
     # =============================
     output = io.BytesIO()
 
@@ -266,11 +295,8 @@ def render():
         aba_descontos.to_excel(writer, sheet_name="Descontos", index=False)
 
         workbook = writer.book
-        formato_moeda = workbook.add_format({
-            "num_format": 'R$ #,##0.00'
-        })
+        formato_moeda = workbook.add_format({"num_format": 'R$ #,##0.00'})
 
-        # Aplicar formato nas colunas numéricas
         for sheet_name, df_excel in {
             "Vencimentos": aba_vencimentos,
             "Retencoes_Credores": aba_repasses,
@@ -279,7 +305,6 @@ def render():
 
             worksheet = writer.sheets[sheet_name]
 
-            # Começa da coluna 1 (coluna 0 é texto: Fonte / Credor / Evento)
             for col_num in range(1, len(df_excel.columns)):
                 worksheet.set_column(col_num, col_num, 18, formato_moeda)
 
