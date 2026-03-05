@@ -8,6 +8,40 @@ st.set_page_config(
 )
 
 # =============================
+# TRADUÇÃO DO FILE UPLOADER
+# =============================
+st.markdown("""
+<style>
+
+/* Esconde textos padrão */
+[data-testid="stFileUploader"] section div div div span {
+    display: none;
+}
+
+/* Texto personalizado */
+[data-testid="stFileUploader"] section div div div::before {
+    content: "Arraste o arquivo aqui ou clique em Procurar";
+    font-size: 16px;
+    color: #444;
+}
+
+/* Botão */
+[data-testid="stFileUploader"] button {
+    text-indent: -9999px;
+    line-height: 0;
+}
+
+[data-testid="stFileUploader"] button::after {
+    content: "Procurar arquivo";
+    text-indent: 0;
+    display: block;
+    line-height: initial;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+# =============================
 # CABEÇALHO PRINCIPAL
 # =============================
 st.markdown("""
@@ -27,8 +61,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-
-
 # =============================
 # ESTILO PERSONALIZADO DAS ABAS
 # =============================
@@ -47,7 +79,7 @@ st.markdown("""
     background-color: #E5EEF7;
 }
 
-/* Texto interno da aba (aqui é o que realmente controla o tamanho) */
+/* Texto da aba */
 .stTabs [data-baseweb="tab"] p {
     font-size: 24px !important;
     font-weight: 600;
